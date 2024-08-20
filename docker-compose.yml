@@ -1,0 +1,82 @@
+version: '3.9'
+
+services:
+  app:
+    build: 
+      context: .
+    ports:
+      - "5000:5000"
+    command: >
+      sh -c "python -m flask run --host=0.0.0.0"
+    volumes:
+      - ./app:/app
+    restart: on-failure
+  
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    ports:
+      - 9100:9100
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    configs:
+      - source: prom-conf1-v3
+        target: /etc/prometheus/prometheus.yml
+        uid: "201"
+        gid: "201"
+        mode: 0644
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - cadvisor
+  
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - 8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  grafana:
+    hostname: grafana
+    image: grafana/grafana-enterprise
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    configs:
+      - source: grafana-ds1-v1
+        target: /etc/grafana/provisioning/datasources/datasource.yaml
+        uid: "201"
+        gid: "201"
+        mode: 0644
+      - source: grafana-dash1-v1
+        target: /etc/grafana/provisioning/dashboards/dashboards.yml
+      - source: grafana-dash2-v2
+        target: /etc/grafana/provisioning/dashboards/node_exporter.json
+      - source: grafana-dash3-v3
+        target: /etc/grafana/provisioning/dashboards/docker_stats.json
+
+configs:
+  prom-conf1-v3:
+    file: ${PWD}/monitoring/prometheus/prometheus.yml
+  grafana-ds1-v1:
+    file: ${PWD}/monitoring/grafana/datasources/datasource.yml
+  grafana-dash1-v1:
+    file:  ${PWD}/monitoring/grafana/dashboards/dashboards.yml
+  grafana-dash2-v2:
+    file: ${PWD}/monitoring/grafana/dashboards/node_exporter.json
+  grafana-dash3-v3:
+    file: ${PWD}/monitoring/grafana/dashboards/docker_stats.json
